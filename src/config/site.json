@@ -1,0 +1,32 @@
+{
+  "company": {
+    "name": "",
+    "description": "",
+    "url": "https://example.com",
+    "socials": {}
+  },
+  "primaryCta": {
+    "label": "",
+    "href": ""
+  },
+  "navigation": [],
+  "resourceCollections": {
+    "blog": false,
+    "caseStudies": false,
+    "videos": false,
+    "guides": false,
+    "newsroom": false,
+    "faqs": false
+  },
+  "seo": {
+    "defaultTitle": "",
+    "titleTemplate": "%s",
+    "defaultDescription": "",
+    "defaultOgImage": null
+  },
+  "locales": ["en"],
+  "defaultLocale": "en",
+  "media": {
+    "hostname": "media.example.com"
+  }
+}

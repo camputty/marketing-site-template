@@ -1,0 +1,21 @@
+import type { Metadata } from "next";
+
+import {
+  generateResourceMetadata,
+  generateResourceStaticParams,
+  ResourceDetailPage,
+} from "@/components/resource-pages";
+
+type PageProps = { params: Promise<{ slug: string }> };
+
+export function generateStaticParams() {
+  return generateResourceStaticParams("caseStudies");
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  return generateResourceMetadata("caseStudies", (await params).slug);
+}
+
+export default async function CaseStudyDetailPage({ params }: PageProps) {
+  return <ResourceDetailPage collection="caseStudies" slug={(await params).slug} />;
+}
