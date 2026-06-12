@@ -163,14 +163,19 @@ function validateReferences(repository: ContentRepository, issues: string[]) {
 
 function validatePublicationDates(repository: ContentRepository, issues: string[]) {
   const today = new Date().toISOString().slice(0, 10);
-  for (const resource of Object.values(repository.resources).flat()) {
-    if (resource.status === "published" && resource.publishedAt > today) {
+  const entries = [
+    ...Object.values(repository.resources).flat(),
+    ...repository.faqs,
+  ];
+
+  for (const entry of entries) {
+    if (entry.status === "published" && entry.publishedAt > today) {
       issues.push(
-        `${resource.sourcePath}: published content cannot have a future publishedAt date`,
+        `${entry.sourcePath}: published content cannot have a future publishedAt date`,
       );
     }
-    if (resource.updatedAt < resource.publishedAt) {
-      issues.push(`${resource.sourcePath}: updatedAt cannot predate publishedAt`);
+    if (entry.updatedAt < entry.publishedAt) {
+      issues.push(`${entry.sourcePath}: updatedAt cannot predate publishedAt`);
     }
   }
 }

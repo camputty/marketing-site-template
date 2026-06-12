@@ -1,11 +1,15 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
+import matter from "gray-matter";
 import { describe, expect, it } from "vitest";
 
 import {
   isPublicStatus,
   loadContentRepository,
 } from "@/lib/content/repository";
+import { newsroomSchema } from "@/schemas/content";
 
 const fixtureRoot = path.join(process.cwd(), "tests", "fixtures", "content");
 
@@ -34,5 +38,45 @@ describe("content repository", () => {
     expect(isPublicStatus("scheduled", "2026-06-12", now)).toBe(false);
     expect(isPublicStatus("scheduled", "2026-06-11", now)).toBe(true);
     expect(isPublicStatus("published", "2026-06-01", now)).toBe(true);
+  });
+
+  it("allows incomplete newsroom drafts but enforces substantive publishable entries", () => {
+    const source = fs.readFileSync(
+      path.join(fixtureRoot, "newsroom", "example-news.md"),
+      "utf8",
+    );
+    const parsed = matter(source);
+    const entry = {
+      ...parsed.data,
+      status: "draft",
+      body: "Replace with substantive content.",
+      sourcePath: "content/newsroom/example.md",
+    };
+
+    expect(newsroomSchema.safeParse(entry).success).toBe(true);
+    expect(
+      newsroomSchema.safeParse({ ...entry, status: "published" }).success,
+    ).toBe(false);
+  });
+
+  it("applies publication date rules to FAQs", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "marketing-content-"));
+    fs.cpSync(fixtureRoot, root, { recursive: true });
+    const faqPath = path.join(root, "faqs", "example-faq.md");
+    const source = fs.readFileSync(faqPath, "utf8");
+    fs.writeFileSync(
+      faqPath,
+      source
+        .replace("publishedAt: 2026-06-01", "publishedAt: 2099-06-01")
+        .replace("updatedAt: 2026-06-02", "updatedAt: 2099-06-02"),
+    );
+
+    try {
+      expect(() => loadContentRepository(root)).toThrow(
+        /published content cannot have a future publishedAt date/,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

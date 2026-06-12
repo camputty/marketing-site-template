@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Container } from "@/components/container";
@@ -17,9 +19,12 @@ import { renderMarkdown } from "@/lib/content/markdown";
 import {
   getPublishedResource,
   getPublishedResources,
+  loadContentRepository,
   type ResourceRecord,
 } from "@/lib/content/repository";
 import { absoluteUrl } from "@/lib/site";
+import { cloudflareStreamPlayerUrl } from "@/lib/video";
+import type { VideoResource } from "@/schemas/content";
 
 export function ResourceIndexPage({
   collection,
@@ -48,11 +53,39 @@ export function ResourceIndexPage({
   );
 }
 
-function resourceJsonLd(resource: ResourceRecord): Record<string, unknown> {
+function videoJsonLd(
+  resource: ResourceRecord,
+  video: VideoResource["video"],
+): Record<string, unknown> | undefined {
+  if (!video) return undefined;
+
+  return {
+    "@type": "VideoObject",
+    name: resource.title,
+    description: resource.summary,
+    thumbnailUrl: video.thumbnailUrl ?? resource.coverImage,
+    uploadDate: `${resource.publishedAt}T00:00:00Z`,
+    duration: video.durationSeconds ? `PT${video.durationSeconds}S` : undefined,
+    embedUrl: cloudflareStreamPlayerUrl(video.id),
+  };
+}
+
+export function resourceJsonLd(resource: ResourceRecord): Record<string, unknown> {
+  if (resource.collection === "videos" && "video" in resource) {
+    return {
+      "@context": "https://schema.org",
+      ...videoJsonLd(resource, resource.video),
+      url: absoluteUrl(resource.url),
+      publisher: {
+        "@type": "Organization",
+        name: siteConfig.company.name,
+        url: siteConfig.company.url,
+      },
+    };
+  }
+
   const type =
-    resource.collection === "videos"
-      ? "VideoObject"
-      : resource.collection === "newsroom"
+    resource.collection === "newsroom"
         ? "NewsArticle"
         : "Article";
   const data: Record<string, unknown> = {
@@ -71,17 +104,90 @@ function resourceJsonLd(resource: ResourceRecord): Record<string, unknown> {
     },
   };
 
-  if (resource.collection === "videos" && "video" in resource) {
-    data.thumbnailUrl = resource.video.thumbnailUrl ?? resource.coverImage;
-    data.duration = resource.video.durationSeconds
-      ? `PT${resource.video.durationSeconds}S`
-      : undefined;
-    data.embedUrl = process.env.NEXT_PUBLIC_CLOUDFLARE_STREAM_CUSTOMER_CODE
-      ? `https://customer-${process.env.NEXT_PUBLIC_CLOUDFLARE_STREAM_CUSTOMER_CODE}.cloudflarestream.com/${resource.video.id}/iframe`
-      : undefined;
+  if ("video" in resource && resource.video) {
+    data.video = videoJsonLd(resource, resource.video);
   }
 
   return data;
+}
+
+function ResourceRelationships({ resource }: { resource: ResourceRecord }) {
+  const repository = loadContentRepository();
+  const authorIds = new Set<string>();
+  if ("author" in resource && resource.author) authorIds.add(resource.author);
+  if (resource.collection === "videos" && "speakers" in resource) {
+    resource.speakers.forEach((speaker) => authorIds.add(speaker));
+  }
+
+  const authors = repository.authors.filter((author) => authorIds.has(author.id));
+  const topic = repository.topics.find((entry) => entry.id === resource.topic);
+  const products = repository.products.filter((product) =>
+    resource.products.includes(product.id),
+  );
+
+  if (authors.length === 0 && !topic && products.length === 0) return null;
+
+  return (
+    <dl className="mt-8 grid gap-4 rounded-lg bg-surface p-5 text-sm sm:grid-cols-3">
+      {authors.length > 0 ? (
+        <div>
+          <dt className="font-semibold">
+            {resource.collection === "videos" ? "Speakers" : "Author"}
+          </dt>
+          <dd className="mt-1 text-muted">
+            {authors.map((author) => author.displayName).join(", ")}
+          </dd>
+        </div>
+      ) : null}
+      {topic ? (
+        <div>
+          <dt className="font-semibold">Topic</dt>
+          <dd className="mt-1 text-muted">{topic.name}</dd>
+        </div>
+      ) : null}
+      {products.length > 0 ? (
+        <div>
+          <dt className="font-semibold">Products</dt>
+          <dd className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-muted">
+            {products.map((product) =>
+              product.productPageUrl ? (
+                <Link key={product.id} href={product.productPageUrl} className="underline">
+                  {product.name}
+                </Link>
+              ) : (
+                <span key={product.id}>{product.name}</span>
+              ),
+            )}
+          </dd>
+        </div>
+      ) : null}
+    </dl>
+  );
+}
+
+function ResourceAttributes({ resource }: { resource: ResourceRecord }) {
+  const attributes: Array<[string, string]> = [];
+  if (resource.collection === "videos") {
+    attributes.push(["Format", resource.format], ["Access", resource.access]);
+  }
+  if (resource.collection === "guides") {
+    attributes.push(["Format", resource.format], ["Access", resource.access]);
+  }
+  if (resource.collection === "newsroom") {
+    attributes.push(["Type", resource.newsType]);
+  }
+  if (attributes.length === 0) return null;
+
+  return (
+    <dl className="mt-8 flex flex-wrap gap-6 text-sm">
+      {attributes.map(([label, value]) => (
+        <div key={label}>
+          <dt className="font-semibold">{label}</dt>
+          <dd className="mt-1 capitalize text-muted">{value.replaceAll("-", " ")}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 function CaseStudySections({ resource }: { resource: ResourceRecord }) {
@@ -91,6 +197,39 @@ function CaseStudySections({ resource }: { resource: ResourceRecord }) {
 
   return (
     <div className="mt-12 grid gap-10">
+      <div>
+        <p className="text-sm font-semibold uppercase tracking-wider text-muted">
+          Customer
+        </p>
+        <p className="mt-2 text-xl font-semibold">{resource.customerName}</p>
+        {resource.customerLogo && resource.customerLogoAlt ? (
+          <Image
+            src={resource.customerLogo}
+            alt={resource.customerLogoAlt}
+            width={320}
+            height={160}
+            className="mt-4 h-20 w-auto object-contain"
+          />
+        ) : null}
+      </div>
+      {resource.metrics.length > 0 ? (
+        <dl className="grid gap-4 sm:grid-cols-3">
+          {resource.metrics.map((metric) => (
+            <div key={`${metric.value}-${metric.label}`} className="rounded-lg bg-surface p-5">
+              <dt className="text-sm text-muted">{metric.label}</dt>
+              <dd className="mt-2 text-3xl font-semibold">{metric.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {resource.featuredQuote ? (
+        <blockquote className="border-l-4 pl-6 text-xl leading-8">
+          <p>“{resource.featuredQuote}”</p>
+          {resource.quoteAttribution ? (
+            <footer className="mt-3 text-sm text-muted">{resource.quoteAttribution}</footer>
+          ) : null}
+        </blockquote>
+      ) : null}
       {[
         ["Challenge", resource.challenge],
         ["Solution", resource.solution],
@@ -106,8 +245,83 @@ function CaseStudySections({ resource }: { resource: ResourceRecord }) {
           />
         </section>
       ))}
+      {resource.pdfUrl ? (
+        <Link href={resource.pdfUrl} className="font-semibold underline">
+          View case study PDF
+        </Link>
+      ) : null}
     </div>
   );
+}
+
+function VideoDetails({ resource }: { resource: ResourceRecord }) {
+  if (!("video" in resource) || !resource.video) return null;
+
+  const takeaways = resource.collection === "videos" ? resource.takeaways : [];
+  const slidesUrl = resource.collection === "videos" ? resource.slidesUrl : undefined;
+
+  return (
+    <div className="mt-10 grid gap-6">
+      {takeaways.length > 0 ? (
+        <section>
+          <Heading as="h2" className="text-2xl">Key takeaways</Heading>
+          <ul className="mt-4 list-disc space-y-2 pl-6">
+            {takeaways.map((takeaway) => (
+              <li key={takeaway}>{takeaway}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        {resource.video.transcriptUrl ? (
+          <Link href={resource.video.transcriptUrl} className="font-semibold underline">
+            Read transcript
+          </Link>
+        ) : null}
+        {slidesUrl ? (
+          <Link href={slidesUrl} className="font-semibold underline">
+            View slides
+          </Link>
+        ) : null}
+        {resource.video.captions.map((caption) => (
+          <Link key={`${caption.language}-${caption.url}`} href={caption.url} className="underline">
+            {caption.label} captions
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResourceDestination({ resource }: { resource: ResourceRecord }) {
+  if (resource.collection === "guides") {
+    return (
+      <div className="mt-10 flex flex-wrap gap-x-5 gap-y-2">
+        {resource.downloadUrl ? (
+          <Link href={resource.downloadUrl} className="font-semibold underline">
+            Download resource
+          </Link>
+        ) : null}
+        {resource.externalUrl ? (
+          <Link href={resource.externalUrl} className="font-semibold underline">
+            View resource
+          </Link>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (resource.collection === "newsroom" && resource.sourceUrl) {
+    return (
+      <p className="mt-10">
+        <Link href={resource.sourceUrl} className="font-semibold underline">
+          View original source
+        </Link>
+      </p>
+    );
+  }
+
+  return null;
 }
 
 export function ResourceDetailPage({
@@ -133,10 +347,13 @@ export function ResourceDetailPage({
               {resource.title}
             </Heading>
             <p className="mt-6 text-xl leading-8 text-muted">{resource.summary}</p>
+            <ResourceAttributes resource={resource} />
+            <ResourceRelationships resource={resource} />
             <div className="mt-10">
               <ResourceMedia resource={resource} />
             </div>
             <CaseStudySections resource={resource} />
+            <VideoDetails resource={resource} />
             {resource.body ? (
               <Prose
                 className="mt-12"
@@ -145,6 +362,7 @@ export function ResourceDetailPage({
                 }}
               />
             ) : null}
+            <ResourceDestination resource={resource} />
           </article>
         </Section>
       </Container>

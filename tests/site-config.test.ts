@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { siteConfig } from "@/config/site";
+import { siteConfig, siteConfigSchema } from "@/config/site";
 
 describe("site configuration defaults", () => {
   it("keeps routing and lifecycle outside configuration", () => {
@@ -8,5 +8,20 @@ describe("site configuration defaults", () => {
     expect("pages" in siteConfig).toBe(false);
     expect("status" in siteConfig).toBe(false);
     expect("initializedAt" in siteConfig).toBe(false);
+  });
+
+  it("requires usable navigation destinations", () => {
+    expect(
+      siteConfigSchema.safeParse({
+        ...siteConfig,
+        navigation: [{ label: "Empty", href: "" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      siteConfigSchema.safeParse({
+        ...siteConfig,
+        navigation: [{ label: "Protocol relative", href: "//example.org" }],
+      }).success,
+    ).toBe(false);
   });
 });

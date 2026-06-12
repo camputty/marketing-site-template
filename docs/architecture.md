@@ -23,9 +23,11 @@ Marketing routes remain normal React files. The starter supplies only a neutral 
 
 - `draft` and `archived` entries are never public.
 - `scheduled` entries become eligible only after `publishedAt` and a new deployment. No internal scheduler is claimed.
+- Resource detail paths and generated feeds are fixed during each build, so a future schedule cannot appear on its own at request time.
 - `published` entries cannot use a future publication date.
 - Empty or disabled collections return 404 and are omitted from generated discovery files.
 - A changed public slug keeps its old full path in `redirectFrom`; Next.js emits a permanent redirect.
+- Production readiness rejects internal navigation, CTA, and product links that do not resolve to a page or that target private or empty resource routes.
 
 ## Portability
 

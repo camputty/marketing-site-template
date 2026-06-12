@@ -34,6 +34,7 @@ redirectFrom: []
 ```
 
 Publishable primary resources require cover media, alt text, and dimensions. Resource-specific fields are enforced in `src/schemas/content.ts`.
+Drafts may retain incomplete working copy, but publishable owned newsroom entries require substantive body content.
 
 ## Identity And URLs
 

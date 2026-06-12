@@ -13,10 +13,12 @@ export const collectionKeys = [
 
 export type CollectionKey = (typeof collectionKeys)[number];
 
-const linkSchema = z.string().refine(
-  (value) => value === "" || value.startsWith("/") || z.url().safeParse(value).success,
+const linkSchema = z.string().min(1).refine(
+  (value) => /^\/(?!\/)/.test(value) || z.url().safeParse(value).success,
   "Use an internal path or absolute URL.",
 );
+
+const optionalLinkSchema = z.union([z.literal(""), linkSchema]);
 
 export const siteConfigSchema = z
   .object({
@@ -28,7 +30,7 @@ export const siteConfigSchema = z
     }),
     primaryCta: z.object({
       label: z.string(),
-      href: linkSchema,
+      href: optionalLinkSchema,
     }),
     navigation: z.array(
       z.object({

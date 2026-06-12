@@ -219,6 +219,7 @@ export const newsroomSchema = z
       });
     }
     if (
+      ["published", "scheduled"].includes(resource.status) &&
       ["press-release", "company-news"].includes(resource.newsType) &&
       resource.body.trim().length < 80
     ) {

@@ -19,8 +19,8 @@ function configuredSite(overrides: Partial<SiteConfig> = {}): SiteConfig {
       description: "A real company description.",
       url: "https://company.test",
     },
-    primaryCta: { label: "Contact us", href: "/contact" },
-    navigation: [{ label: "About", href: "/about" }],
+    primaryCta: { label: "Contact us", href: "https://example.org/contact" },
+    navigation: [],
     seo: {
       ...siteConfig.seo,
       defaultTitle: "Example Company",
@@ -37,6 +37,12 @@ function temporaryApp(source: string): string {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, source);
   return root;
+}
+
+function addPage(root: string, route: string) {
+  const target = path.join(root, "src", "app", route, "page.tsx");
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, "export default function Page() { return <main>Page</main>; }");
 }
 
 afterEach(() => {
@@ -63,15 +69,37 @@ describe("production readiness", () => {
     expect(collectReadinessIssues(config, loadContentRepository(), root)).toEqual([]);
   });
 
-  it("does not enforce navigation completeness or empty collection policy", () => {
+  it("rejects navigation to empty collections", () => {
     const root = temporaryApp(
       "export default function Page() { return <main>Company home</main>; }",
     );
+    addPage(root, "resources");
     const config = configuredSite({
       navigation: [{ label: "Resources", href: "/resources" }],
       resourceCollections: { ...siteConfig.resourceCollections, blog: true },
     });
 
-    expect(collectReadinessIssues(config, loadContentRepository(), root)).toEqual([]);
+    expect(collectReadinessIssues(config, loadContentRepository(), root)).toContain(
+      'navigation item "Resources" points to an empty resources page',
+    );
+  });
+
+  it("rejects missing internal routes and accepts route groups", () => {
+    const root = temporaryApp(
+      "export default function Page() { return <main>Company home</main>; }",
+    );
+    addPage(root, "(marketing)/about");
+
+    const valid = configuredSite({
+      navigation: [{ label: "About", href: "/about#team" }],
+    });
+    expect(collectReadinessIssues(valid, loadContentRepository(), root)).toEqual([]);
+
+    const invalid = configuredSite({
+      navigation: [{ label: "Missing", href: "/missing" }],
+    });
+    expect(collectReadinessIssues(invalid, loadContentRepository(), root)).toContain(
+      'navigation item "Missing" points to missing route /missing',
+    );
   });
 });

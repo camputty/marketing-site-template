@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Kept scheduled resources and discovery feeds deployment-bound.
+- Corrected video sitemap and VideoObject discovery metadata.
+- Added route-aware readiness checks and explicit-page sitemap discovery.
+- Rendered validated resource relationships, proof, media support, and destinations.
+- Isolated browser tests and patched the PostCSS dependency advisory.
+
 ## 0.1.0 - 2026-06-11
 
 - Initial agent-native marketing site starter.

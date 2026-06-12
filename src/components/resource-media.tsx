@@ -1,20 +1,21 @@
 import Image from "next/image";
 
 import type { ResourceRecord } from "@/lib/content/repository";
+import { cloudflareStreamPlayerUrl } from "@/lib/video";
 
 type ResourceMediaProps = {
   resource: ResourceRecord;
 };
 
 export function ResourceMedia({ resource }: ResourceMediaProps) {
-  if (resource.collection === "videos" && "video" in resource) {
-    const customerCode = process.env.NEXT_PUBLIC_CLOUDFLARE_STREAM_CUSTOMER_CODE;
-    if (customerCode) {
+  if ("video" in resource && resource.video) {
+    const playerUrl = cloudflareStreamPlayerUrl(resource.video.id);
+    if (playerUrl) {
       return (
         <div className="aspect-video overflow-hidden rounded-lg bg-black">
           <iframe
             title={resource.title}
-            src={`https://customer-${customerCode}.cloudflarestream.com/${resource.video.id}/iframe`}
+            src={playerUrl}
             className="h-full w-full border-0"
             allow="accelerometer; autoplay; encrypted-media; picture-in-picture"
             allowFullScreen

@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
 
-import { siteConfig } from "@/config/site";
 import {
   collectionDefinitions,
   primaryCollectionKeys,
@@ -11,15 +10,22 @@ import {
 } from "@/lib/content/repository";
 import { absoluteUrl } from "@/lib/site";
 import { isSiteConfigured } from "@/lib/site";
+import { collectStaticPageRoutes } from "@/lib/routes";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   if (!isSiteConfigured()) return [];
 
-  const pagePaths = new Set(["/"]);
-  for (const item of siteConfig.navigation) {
-    if (item.href.startsWith("/")) pagePaths.add(item.href);
-  }
-  const entries: MetadataRoute.Sitemap = [...pagePaths].map((pagePath) => ({
+  const managedPaths = new Set([
+    "/resources",
+    "/faqs",
+    ...primaryCollectionKeys.map(
+      (collection) => collectionDefinitions[collection].route,
+    ),
+  ]);
+  const pagePaths = collectStaticPageRoutes().filter(
+    (pagePath) => !managedPaths.has(pagePath),
+  );
+  const entries: MetadataRoute.Sitemap = pagePaths.map((pagePath) => ({
     url: absoluteUrl(pagePath),
   }));
 

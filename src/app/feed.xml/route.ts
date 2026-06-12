@@ -5,6 +5,8 @@ import { escapeXml } from "@/lib/xml";
 import { siteConfig } from "@/config/site";
 import { isSiteConfigured } from "@/lib/site";
 
+export const dynamic = "force-static";
+
 export function GET() {
   const resources = primaryCollectionKeys
     .flatMap((collection) => getPublishedResources(collection))

@@ -5,3 +5,5 @@ allowBuilds:
 verifyDepsBeforeRun: false
 minimumReleaseAgeExclude:
   - '@types/node@24.13.2'
+overrides:
+  postcss: 8.5.15
