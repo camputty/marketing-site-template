@@ -51,4 +51,18 @@ Use immutable or versioned public R2 URLs. Store source, rights, attribution, an
 
 A future `scheduled` entry remains private. It becomes public only when the date has arrived and an external action triggers a new deployment. Use Vercel Deploy Hooks, GitHub Actions, or another explicit scheduler when a project needs automatic publication.
 
+## Delegated Publishing
+
+By default, this starter assumes repository collaborators follow the project's normal GitHub review and publishing process.
+
+Teams that want content contributors to publish without approving application-code changes can add project-specific controls such as:
+
+- GitHub teams for content publishers and web maintainers
+- `CODEOWNERS` rules based on file paths
+- Branch rules requiring pull requests and owner reviews
+- Required content-validation checks
+- A restricted Codex skill for content-authoring tasks
+
+These controls are intentionally not included by default because repository ownership, approval requirements, and deployment permissions vary by organization. A Codex skill provides workflow guidance; GitHub permissions and branch rules should provide enforcement.
+
 Always run `pnpm validate` before review.
