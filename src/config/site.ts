@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+import {
+  isHttpsAssetUrl,
+  isHttpsUrl,
+  isNavigationHref,
+  isSiteBaseUrl,
+} from "../lib/urls";
+
 import rawConfig from "./site.json";
 
 export const collectionKeys = [
@@ -13,32 +20,43 @@ export const collectionKeys = [
 
 export type CollectionKey = (typeof collectionKeys)[number];
 
-const linkSchema = z.string().min(1).refine(
-  (value) => /^\/(?!\/)/.test(value) || z.url().safeParse(value).success,
-  "Use an internal path or absolute URL.",
-);
+const linkSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(
+    isNavigationHref,
+    "Use an internal path, HTTPS URL, mailto URL, or tel URL.",
+  );
 
 const optionalLinkSchema = z.union([z.literal(""), linkSchema]);
+const httpsUrlSchema = z.string().refine(isHttpsUrl, "Use an HTTPS URL.");
+const siteBaseUrlSchema = z
+  .string()
+  .refine(isSiteBaseUrl, "Use an HTTPS site origin without a path, query, or fragment.");
+const httpsAssetUrlSchema = z
+  .string()
+  .refine(isHttpsAssetUrl, "Use an HTTPS asset URL without a fragment.");
 
 export const siteConfigSchema = z
-  .object({
-    company: z.object({
+  .strictObject({
+    company: z.strictObject({
       name: z.string(),
       description: z.string(),
-      url: z.url(),
-      socials: z.record(z.string(), z.url()),
+      url: siteBaseUrlSchema,
+      socials: z.record(z.string(), httpsUrlSchema),
     }),
-    primaryCta: z.object({
+    primaryCta: z.strictObject({
       label: z.string(),
       href: optionalLinkSchema,
     }),
     navigation: z.array(
-      z.object({
-        label: z.string().min(1),
+      z.strictObject({
+        label: z.string().trim().min(1),
         href: linkSchema,
       }),
     ),
-    resourceCollections: z.object({
+    resourceCollections: z.strictObject({
       blog: z.boolean(),
       caseStudies: z.boolean(),
       videos: z.boolean(),
@@ -46,15 +64,21 @@ export const siteConfigSchema = z
       newsroom: z.boolean(),
       faqs: z.boolean(),
     }),
-    seo: z.object({
+    seo: z.strictObject({
       defaultTitle: z.string(),
       titleTemplate: z.string(),
       defaultDescription: z.string(),
-      defaultOgImage: z.url().nullable(),
+      defaultOgImage: z
+        .strictObject({
+          url: httpsAssetUrlSchema,
+          alt: z.string().trim().min(1),
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+        })
+        .nullable(),
     }),
-    locales: z.array(z.string().regex(/^[a-z]{2}(?:-[A-Z]{2})?$/)).min(1),
-    defaultLocale: z.string(),
-    media: z.object({
+    defaultLocale: z.string().regex(/^[a-z]{2}(?:-[A-Z]{2})?$/),
+    media: z.strictObject({
       hostname: z
         .string()
         .min(1)
@@ -62,12 +86,16 @@ export const siteConfigSchema = z
     }),
   })
   .superRefine((config, context) => {
-    if (!config.locales.includes(config.defaultLocale)) {
-      context.addIssue({
-        code: "custom",
-        path: ["defaultLocale"],
-        message: "The default locale must be included in locales.",
-      });
+    const navigationHrefs = new Set<string>();
+    for (const [index, item] of config.navigation.entries()) {
+      if (navigationHrefs.has(item.href)) {
+        context.addIssue({
+          code: "custom",
+          path: ["navigation", index, "href"],
+          message: "Navigation destinations must be unique.",
+        });
+      }
+      navigationHrefs.add(item.href);
     }
   });
 

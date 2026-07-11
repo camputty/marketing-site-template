@@ -5,52 +5,30 @@ import {
   guideSchema,
   newsroomSchema,
   videoResourceSchema,
-} from "@/schemas/content";
+} from "../../schemas/content";
+import { primaryCollectionContracts } from "./contracts";
 
-export const primaryCollectionKeys = [
-  "blog",
-  "caseStudies",
-  "videos",
-  "guides",
-  "newsroom",
-] as const;
-
-export type PrimaryCollectionKey = (typeof primaryCollectionKeys)[number];
+export { primaryCollectionKeys, type PrimaryCollectionKey } from "./contracts";
 
 export const collectionDefinitions = {
   blog: {
-    directory: "blog",
-    route: "/blog",
-    label: "Blog",
-    singularLabel: "Article",
+    ...primaryCollectionContracts.blog,
     schema: blogSchema,
   },
   caseStudies: {
-    directory: "case-studies",
-    route: "/case-studies",
-    label: "Case studies",
-    singularLabel: "Case study",
+    ...primaryCollectionContracts.caseStudies,
     schema: caseStudySchema,
   },
   videos: {
-    directory: "videos",
-    route: "/videos",
-    label: "Videos",
-    singularLabel: "Video",
+    ...primaryCollectionContracts.videos,
     schema: videoResourceSchema,
   },
   guides: {
-    directory: "guides",
-    route: "/guides",
-    label: "Guides and briefs",
-    singularLabel: "Guide",
+    ...primaryCollectionContracts.guides,
     schema: guideSchema,
   },
   newsroom: {
-    directory: "newsroom",
-    route: "/newsroom",
-    label: "Newsroom",
-    singularLabel: "News",
+    ...primaryCollectionContracts.newsroom,
     schema: newsroomSchema,
   },
 } as const;

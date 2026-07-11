@@ -8,12 +8,15 @@ import {
   getPublishedFaqs,
   getPublishedResources,
 } from "@/lib/content/repository";
-import { absoluteUrl } from "@/lib/site";
-import { isSiteConfigured } from "@/lib/site";
+import {
+  absoluteUrl,
+  isDiscoveryEnabled,
+  isCanonicalResourcePage,
+} from "@/lib/site";
 import { collectStaticPageRoutes } from "@/lib/routes";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  if (!isSiteConfigured()) return [];
+  if (!isDiscoveryEnabled()) return [];
 
   const managedPaths = new Set([
     "/resources",
@@ -29,20 +32,27 @@ export default function sitemap(): MetadataRoute.Sitemap {
     url: absoluteUrl(pagePath),
   }));
 
+  let hasResources = false;
   const allResources = primaryCollectionKeys.flatMap((collection) => {
     const resources = getPublishedResources(collection);
     if (resources.length === 0) return [];
+    hasResources = true;
 
     return [
       { url: absoluteUrl(collectionDefinitions[collection].route) },
-      ...resources.map((resource) => ({
-        url: absoluteUrl(resource.url),
-        lastModified: resource.updatedAt,
-      })),
+      ...resources
+        .filter(isCanonicalResourcePage)
+        .map((resource) => ({
+          url: absoluteUrl(resource.url),
+          lastModified:
+            resource.updatedAt > resource.publishedAt
+              ? resource.updatedAt
+              : resource.publishedAt,
+        })),
     ];
   });
 
-  if (allResources.length > 0) {
+  if (hasResources) {
     entries.push({ url: absoluteUrl("/resources") }, ...allResources);
   }
   if (getPublishedFaqs().length > 0) {

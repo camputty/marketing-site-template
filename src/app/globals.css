@@ -41,8 +41,87 @@ a {
 
 .prose :where(h2, h3) {
   margin-top: 2em;
+  margin-bottom: 0.75em;
   font-weight: 650;
   letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.prose :where(h4, h5, h6) {
+  margin-top: 1.75em;
+  margin-bottom: 0.6em;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.prose :where(p, ul, ol, blockquote, pre, table) {
+  margin-block: 1.25em;
+}
+
+.prose :where(ul, ol) {
+  padding-left: 1.5em;
+}
+
+.prose :where(ul) {
+  list-style: disc;
+}
+
+.prose :where(ol) {
+  list-style: decimal;
+}
+
+.prose :where(li + li) {
+  margin-top: 0.4em;
+}
+
+.prose :where(blockquote) {
+  border-left: 3px solid var(--border);
+  padding-left: 1.25em;
+  color: var(--muted);
+}
+
+.prose :where(hr) {
+  margin-block: 2.5em;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.prose :where(code) {
+  border-radius: 0.25rem;
+  background: var(--surface);
+  padding: 0.15em 0.35em;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.9em;
+}
+
+.prose :where(pre) {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: var(--surface);
+  padding: 1rem;
+}
+
+.prose :where(pre code) {
+  background: transparent;
+  padding: 0;
+}
+
+.prose :where(table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.prose :where(th, td) {
+  border: 1px solid var(--border);
+  padding: 0.65rem 0.8rem;
+  text-align: left;
+}
+
+.prose :where(th) {
+  background: var(--surface);
+  font-weight: 650;
 }
 
 .prose :where(a) {

@@ -1,7 +1,17 @@
+import type { Metadata } from "next";
+
 import { Container } from "@/components/container";
 import { Heading } from "@/components/heading";
 import { Section } from "@/components/section";
-import { isSiteConfigured } from "@/lib/site";
+import { siteConfig } from "@/config/site";
+import { isSiteConfigured, pageMetadata } from "@/lib/site";
+
+export const metadata: Metadata = pageMetadata(
+  "/",
+  siteConfig.seo.defaultTitle,
+  siteConfig.seo.defaultDescription,
+  { absoluteTitle: true },
+);
 
 export default function HomePage() {
   if (isSiteConfigured()) {

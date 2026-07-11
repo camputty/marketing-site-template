@@ -1,6 +1,14 @@
 import { ulid } from "ulid";
 
-const allowedPrefixes = new Set(["res", "faq", "aut", "top", "prd"]);
+import {
+  primaryCollectionContracts,
+  supportingContentContracts,
+} from "../src/lib/content/contracts";
+
+const allowedPrefixes = new Set<string>([
+  ...Object.values(primaryCollectionContracts).map(({ idPrefix }) => idPrefix),
+  ...Object.values(supportingContentContracts).map(({ idPrefix }) => idPrefix),
+]);
 const prefix = process.argv[2];
 
 if (!prefix || !allowedPrefixes.has(prefix)) {

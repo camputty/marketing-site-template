@@ -1,0 +1,39 @@
+{
+  "company": {
+    "name": "Configured Site Fixture",
+    "description": "A test-only company used to exercise the complete publishing path.",
+    "url": "https://fixture.example.test",
+    "socials": {}
+  },
+  "primaryCta": {
+    "label": "View the product fixture",
+    "href": "/product"
+  },
+  "navigation": [
+    { "label": "Resources", "href": "/resources" },
+    { "label": "FAQs", "href": "/faqs" }
+  ],
+  "resourceCollections": {
+    "blog": true,
+    "caseStudies": true,
+    "videos": true,
+    "guides": true,
+    "newsroom": true,
+    "faqs": true
+  },
+  "seo": {
+    "defaultTitle": "Configured Site Fixture",
+    "titleTemplate": "%s | Configured Site Fixture",
+    "defaultDescription": "A test-only site that exercises production metadata and discovery.",
+    "defaultOgImage": {
+      "url": "https://media.example.test/social-card.png",
+      "alt": "Configured site fixture social card.",
+      "width": 1200,
+      "height": 630
+    }
+  },
+  "defaultLocale": "en",
+  "media": {
+    "hostname": "media.example.test"
+  }
+}

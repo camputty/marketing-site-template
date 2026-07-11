@@ -79,4 +79,45 @@ describe("content repository", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("supports nested content directories without silently skipping files", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "marketing-content-"));
+    fs.cpSync(fixtureRoot, root, { recursive: true });
+    const source = path.join(root, "blog", "example-article.md");
+    const target = path.join(root, "blog", "2026", "example-article.md");
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.renameSync(source, target);
+
+    try {
+      const repository = loadContentRepository(root);
+      expect(repository.resources.blog).toHaveLength(1);
+      expect(repository.resources.blog[0].sourcePath).toMatch(
+        /blog\/2026\/example-article\.md$/,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("allows future scheduling while requiring updatedAt to describe a real edit", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "marketing-content-"));
+    fs.cpSync(fixtureRoot, root, { recursive: true });
+    const articlePath = path.join(root, "blog", "example-article.md");
+    const source = fs.readFileSync(articlePath, "utf8");
+    fs.writeFileSync(
+      articlePath,
+      source
+        .replace("status: published", "status: scheduled")
+        .replace("publishedAt: 2026-06-01", "publishedAt: 2026-08-01")
+        .replace("updatedAt: 2026-06-02", "updatedAt: 2026-07-10"),
+    );
+
+    try {
+      expect(() =>
+        loadContentRepository(root, new Date("2026-07-10T12:00:00Z")),
+      ).not.toThrow();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

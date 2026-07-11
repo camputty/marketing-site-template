@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { Container } from "@/components/container";
@@ -6,11 +7,13 @@ import { Prose } from "@/components/prose";
 import { Section } from "@/components/section";
 import { renderMarkdown } from "@/lib/content/markdown";
 import { getPublishedFaqs } from "@/lib/content/repository";
+import { pageMetadata } from "@/lib/site";
 
-export const metadata = {
-  title: "Frequently asked questions",
-  description: "Answers to frequently asked questions.",
-};
+export const metadata: Metadata = pageMetadata(
+  "/faqs",
+  "Frequently asked questions",
+  "Answers to frequently asked questions.",
+);
 
 export default function FaqsPage() {
   const faqs = getPublishedFaqs();

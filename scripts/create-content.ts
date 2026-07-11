@@ -4,19 +4,34 @@ import path from "node:path";
 import matter from "gray-matter";
 import { ulid } from "ulid";
 
-const definitions = {
-  blog: { directory: "blog", prefix: "res" },
-  "case-studies": { directory: "case-studies", prefix: "res" },
-  videos: { directory: "videos", prefix: "res" },
-  guides: { directory: "guides", prefix: "res" },
-  newsroom: { directory: "newsroom", prefix: "res" },
-  faqs: { directory: "faqs", prefix: "faq" },
-  authors: { directory: "authors", prefix: "aut" },
-  topics: { directory: "topics", prefix: "top" },
-  products: { directory: "products", prefix: "prd" },
-} as const;
+import {
+  primaryCollectionContracts,
+  primaryCollectionKeys,
+  supportingContentContracts,
+} from "../src/lib/content/contracts";
+import { templatePlaceholders } from "../src/lib/template-placeholders";
 
-type CollectionName = keyof typeof definitions;
+const definitions: Record<string, { directory: string; prefix: string }> = {
+  ...Object.fromEntries(
+    primaryCollectionKeys.map((key) => {
+      const contract = primaryCollectionContracts[key];
+      return [
+        contract.command,
+        { directory: contract.directory, prefix: contract.idPrefix },
+      ];
+    }),
+  ),
+  ...Object.fromEntries(
+    Object.entries(supportingContentContracts).map(([command, contract]) => [
+      command,
+      { directory: contract.directory, prefix: contract.idPrefix },
+    ]),
+  ),
+};
+
+type CollectionName =
+  | (typeof primaryCollectionContracts)[keyof typeof primaryCollectionContracts]["command"]
+  | keyof typeof supportingContentContracts;
 
 function slugify(value: string): string {
   return value
@@ -34,7 +49,7 @@ function resourceData(collection: CollectionName, id: string, title: string) {
     schemaVersion: 1,
     title,
     slug: slugify(title),
-    summary: "Replace with a concise summary.",
+    summary: templatePlaceholders.summary,
     products: [],
     featured: false,
     status: "draft",
@@ -47,17 +62,21 @@ function resourceData(collection: CollectionName, id: string, title: string) {
   if (collection === "case-studies") {
     return {
       ...shared,
-      customerName: "Replace with customer name",
-      challenge: "Replace with the challenge.",
-      solution: "Replace with the solution.",
-      results: "Replace with the results.",
+      customerName: templatePlaceholders.customerName,
+      challenge: templatePlaceholders.challenge,
+      solution: templatePlaceholders.solution,
+      results: templatePlaceholders.results,
       metrics: [],
     };
   }
   if (collection === "videos") {
     return {
       ...shared,
-      video: { provider: "cloudflare-stream", id: "replace-stream-id", captions: [] },
+      video: {
+        provider: "cloudflare-stream",
+        id: templatePlaceholders.streamId,
+        captions: [],
+      },
       access: "open",
       format: "webinar",
       speakers: [],
@@ -83,10 +102,23 @@ function resourceData(collection: CollectionName, id: string, title: string) {
     };
   }
   if (collection === "authors") {
-    return { id, schemaVersion: 1, displayName: title, slug: slugify(title) };
+    return {
+      id,
+      schemaVersion: 1,
+      status: "active",
+      displayName: title,
+      slug: slugify(title),
+    };
   }
   if (collection === "topics" || collection === "products") {
-    return { id, schemaVersion: 1, name: title, slug: slugify(title), displayOrder: 0 };
+    return {
+      id,
+      schemaVersion: 1,
+      status: "active",
+      name: title,
+      slug: slugify(title),
+      displayOrder: 0,
+    };
   }
   return shared;
 }
@@ -111,11 +143,46 @@ if (!slug) {
 }
 
 const target = path.join(process.cwd(), "content", definition.directory, `${slug}.md`);
-if (fs.existsSync(target)) {
-  console.error(`Refusing to overwrite ${path.relative(process.cwd(), target)}.`);
+const collectionRoot = path.join(process.cwd(), "content", definition.directory);
+
+function markdownFiles(directory: string): string[] {
+  if (!fs.existsSync(directory)) return [];
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) return markdownFiles(entryPath);
+    return entry.isFile() && entry.name.endsWith(".md") ? [entryPath] : [];
+  });
+}
+
+const existingSlug = markdownFiles(collectionRoot).find((filePath) => {
+  const data = matter(fs.readFileSync(filePath, "utf8")).data as {
+    slug?: unknown;
+  };
+  return data.slug === slug;
+});
+if (existingSlug) {
+  console.error(
+    `Refusing to duplicate slug ${slug}; it already exists in ${path.relative(process.cwd(), existingSlug)}.`,
+  );
   process.exit(1);
 }
 
-const body = collection === "faqs" ? "Replace with the answer." : "Replace with substantive content.";
-fs.writeFileSync(target, matter.stringify(`${body}\n`, resourceData(collection, id, title)));
+const body =
+  collection === "faqs"
+    ? templatePlaceholders.faqBody
+    : templatePlaceholders.body;
+try {
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(
+    target,
+    matter.stringify(`${body}\n`, resourceData(collection, id, title)),
+    { flag: "wx" },
+  );
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+    console.error(`Refusing to overwrite ${path.relative(process.cwd(), target)}.`);
+    process.exit(1);
+  }
+  throw error;
+}
 console.log(`Created ${path.relative(process.cwd(), target)} with ID ${id}.`);

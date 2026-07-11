@@ -7,6 +7,8 @@ role: Test fixture
 company: Example Company
 photo: https://media.example.test/author.webp
 photoAlt: Portrait fixture for Example Author.
+photoWidth: 640
+photoHeight: 640
 linkedInUrl: https://www.linkedin.com/in/example
 ---
 

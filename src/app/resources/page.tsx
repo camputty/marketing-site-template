@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { Container } from "@/components/container";
@@ -6,11 +7,13 @@ import { ResourceCard } from "@/components/resource-card";
 import { Section } from "@/components/section";
 import { primaryCollectionKeys } from "@/lib/content/collections";
 import { getPublishedResources } from "@/lib/content/repository";
+import { pageMetadata } from "@/lib/site";
 
-export const metadata = {
-  title: "Resources",
-  description: "Browse the latest resources.",
-};
+export const metadata: Metadata = pageMetadata(
+  "/resources",
+  "Resources",
+  "Browse the latest resources.",
+);
 
 export default function ResourcesPage() {
   const resources = primaryCollectionKeys

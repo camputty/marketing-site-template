@@ -5,31 +5,43 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
       - run: corepack enable
-      - run: corepack prepare pnpm@11.5.3 --activate
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod --audit-level moderate
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Check content identity and slug history
+        env:
+          CONTENT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: pnpm content:history --base "$CONTENT_BASE_REF"
 
   browser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
       - run: corepack enable
-      - run: corepack prepare pnpm@11.5.3 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      - run: pnpm test:configured

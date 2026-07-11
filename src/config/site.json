@@ -24,7 +24,6 @@
     "defaultDescription": "",
     "defaultOgImage": null
   },
-  "locales": ["en"],
   "defaultLocale": "en",
   "media": {
     "hostname": "media.example.com"

@@ -1,6 +1,26 @@
 import { z } from "zod";
 
-const ulidPattern = "[0-9A-HJKMNP-TV-Z]{26}";
+import {
+  isCanonicalUrl,
+  isHttpsAssetUrl,
+  isHttpsUrl,
+  isInternalPathHref,
+  isLiteralRedirectPath,
+} from "../lib/urls";
+
+const ulidPattern = "[0-7][0-9A-HJKMNP-TV-Z]{25}";
+
+const nonBlankString = z.string().trim().min(1);
+const httpsUrlSchema = z.string().refine(isHttpsUrl, "Use an HTTPS URL.");
+const httpsAssetUrlSchema = z
+  .string()
+  .refine(isHttpsAssetUrl, "Use an HTTPS asset URL without a fragment.");
+const canonicalUrlSchema = z
+  .string()
+  .refine(isCanonicalUrl, "Use an HTTPS canonical URL without a fragment.");
+const internalHrefSchema = z
+  .string()
+  .refine(isInternalPathHref, "Use an internal path, query, or fragment.");
 
 export const idSchema = (prefix: string) =>
   z.string().regex(new RegExp(`^${prefix}_${ulidPattern}$`));
@@ -16,17 +36,20 @@ const isoDateSchema = z.preprocess(
 
 const slugSchema = z
   .string()
+  .trim()
   .min(1)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use a lowercase URL slug.");
 
-const pathSchema = z.string().startsWith("/").refine(
-  (value) => value === "/" || !value.endsWith("/"),
-  "Redirect paths must not end in a slash.",
-);
+const pathSchema = z
+  .string()
+  .refine(
+    isLiteralRedirectPath,
+    "Use a literal internal path without a trailing slash, query, fragment, or routing pattern.",
+  );
 
-const seoSchema = z.object({
-  title: z.string().min(1).optional(),
-  description: z.string().min(1).optional(),
+const seoSchema = z.strictObject({
+  title: nonBlankString.optional(),
+  description: nonBlankString.optional(),
 });
 
 export const publicationStatusSchema = z.enum([
@@ -36,18 +59,18 @@ export const publicationStatusSchema = z.enum([
   "archived",
 ]);
 
-export const videoSchema = z.object({
+export const videoSchema = z.strictObject({
   provider: z.literal("cloudflare-stream"),
-  id: z.string().min(1),
-  thumbnailUrl: z.url().optional(),
-  durationSeconds: z.number().int().positive().optional(),
-  transcriptUrl: z.url().optional(),
+  id: nonBlankString,
+  thumbnailUrl: httpsAssetUrlSchema.optional(),
+  durationSeconds: z.number().int().positive().max(28_800).optional(),
+  transcriptUrl: httpsAssetUrlSchema.optional(),
   captions: z
     .array(
-      z.object({
-        language: z.string().min(2),
-        label: z.string().min(1),
-        url: z.url(),
+      z.strictObject({
+        language: z.string().trim().min(2),
+        label: nonBlankString,
+        url: httpsAssetUrlSchema,
       }),
     )
     .default([]),
@@ -56,11 +79,11 @@ export const videoSchema = z.object({
 const sharedResourceFields = {
   id: idSchema("res"),
   schemaVersion: z.literal(1),
-  title: z.string().min(1),
+  title: nonBlankString,
   slug: slugSchema,
-  summary: z.string().min(1),
-  coverImage: z.url().optional(),
-  coverImageAlt: z.string().min(1).optional(),
+  summary: nonBlankString,
+  coverImage: httpsAssetUrlSchema.optional(),
+  coverImageAlt: nonBlankString.optional(),
   coverImageWidth: z.number().int().positive().optional(),
   coverImageHeight: z.number().int().positive().optional(),
   topic: idSchema("top").optional(),
@@ -70,8 +93,14 @@ const sharedResourceFields = {
   publishedAt: isoDateSchema,
   updatedAt: isoDateSchema,
   seo: seoSchema.optional(),
-  canonicalUrl: z.url().nullable().default(null),
-  redirectFrom: z.array(pathSchema).default([]),
+  canonicalUrl: canonicalUrlSchema.nullable().default(null),
+  redirectFrom: z
+    .array(pathSchema)
+    .refine(
+      (paths) => new Set(paths).size === paths.length,
+      "redirectFrom paths must be unique.",
+    )
+    .default([]),
   body: z.string(),
   sourcePath: z.string(),
 };
@@ -106,50 +135,112 @@ function requirePublishedCover(
   }
 }
 
+function validateVideoDiscovery(
+  resource: {
+    status: z.infer<typeof publicationStatusSchema>;
+    title: string;
+    summary: string;
+    video?: z.infer<typeof videoSchema>;
+  },
+  context: z.RefinementCtx,
+) {
+  if (
+    !resource.video ||
+    (resource.status !== "published" && resource.status !== "scheduled")
+  ) {
+    return;
+  }
+  if (resource.title.length > 100) {
+    context.addIssue({
+      code: "custom",
+      path: ["title"],
+      message: "Video titles must be 100 characters or fewer for discovery.",
+    });
+  }
+  if (resource.summary.length > 2_048) {
+    context.addIssue({
+      code: "custom",
+      path: ["summary"],
+      message: "Video descriptions must be 2,048 characters or fewer for discovery.",
+    });
+  }
+}
+
 export const blogSchema = z
-  .object({
+  .strictObject({
     ...sharedResourceFields,
     author: idSchema("aut").optional(),
     video: videoSchema.optional(),
   })
-  .superRefine(requirePublishedCover);
+  .superRefine((resource, context) => {
+    requirePublishedCover(resource, context);
+    validateVideoDiscovery(resource, context);
+    if (
+      ["published", "scheduled"].includes(resource.status) &&
+      !resource.body.trim()
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["body"],
+        message: "Publishable articles require body content.",
+      });
+    }
+  });
 
 export const caseStudySchema = z
-  .object({
+  .strictObject({
     ...sharedResourceFields,
-    customerName: z.string().min(1),
-    challenge: z.string().min(1),
-    solution: z.string().min(1),
-    results: z.string().min(1),
-    customerLogo: z.url().optional(),
-    customerLogoAlt: z.string().min(1).optional(),
-    featuredQuote: z.string().min(1).optional(),
-    quoteAttribution: z.string().min(1).optional(),
+    customerName: nonBlankString,
+    challenge: nonBlankString,
+    solution: nonBlankString,
+    results: nonBlankString,
+    customerLogo: httpsAssetUrlSchema.optional(),
+    customerLogoAlt: nonBlankString.optional(),
+    customerLogoWidth: z.number().int().positive().optional(),
+    customerLogoHeight: z.number().int().positive().optional(),
+    featuredQuote: nonBlankString.optional(),
+    quoteAttribution: nonBlankString.optional(),
     metrics: z
       .array(
-        z.object({
-          value: z.string().min(1),
-          label: z.string().min(1),
+        z.strictObject({
+          value: nonBlankString,
+          label: nonBlankString,
         }),
       )
       .max(3)
       .default([]),
     video: videoSchema.optional(),
-    pdfUrl: z.url().optional(),
+    pdfUrl: httpsAssetUrlSchema.optional(),
   })
   .superRefine((resource, context) => {
     requirePublishedCover(resource, context);
-    if (resource.customerLogo && !resource.customerLogoAlt) {
+    validateVideoDiscovery(resource, context);
+    if (resource.customerLogo) {
+      for (const field of [
+        "customerLogoAlt",
+        "customerLogoWidth",
+        "customerLogoHeight",
+      ] as const) {
+        if (!resource[field]) {
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: `${field} is required when a customer logo is present.`,
+          });
+        }
+      }
+    }
+    if (Boolean(resource.featuredQuote) !== Boolean(resource.quoteAttribution)) {
       context.addIssue({
         code: "custom",
-        path: ["customerLogoAlt"],
-        message: "Customer logo alt text is required when a logo is present.",
+        path: [resource.featuredQuote ? "quoteAttribution" : "featuredQuote"],
+        message: "A featured quote and its attribution must be provided together.",
       });
     }
   });
 
 export const videoResourceSchema = z
-  .object({
+  .strictObject({
     ...sharedResourceFields,
     video: videoSchema,
     access: z.enum(["open", "gated"]),
@@ -162,13 +253,16 @@ export const videoResourceSchema = z
       "explainer",
     ]),
     speakers: z.array(idSchema("aut")).default([]),
-    takeaways: z.array(z.string().min(1)).default([]),
-    slidesUrl: z.url().optional(),
+    takeaways: z.array(nonBlankString).default([]),
+    slidesUrl: httpsAssetUrlSchema.optional(),
   })
-  .superRefine(requirePublishedCover);
+  .superRefine((resource, context) => {
+    requirePublishedCover(resource, context);
+    validateVideoDiscovery(resource, context);
+  });
 
 export const guideSchema = z
-  .object({
+  .strictObject({
     ...sharedResourceFields,
     format: z.enum([
       "guide",
@@ -180,8 +274,8 @@ export const guideSchema = z
     ]),
     access: z.enum(["open", "gated"]),
     author: idSchema("aut").optional(),
-    downloadUrl: z.url().optional(),
-    externalUrl: z.url().optional(),
+    downloadUrl: httpsAssetUrlSchema.optional(),
+    externalUrl: httpsUrlSchema.optional(),
   })
   .superRefine((resource, context) => {
     requirePublishedCover(resource, context);
@@ -199,7 +293,7 @@ export const guideSchema = z
   });
 
 export const newsroomSchema = z
-  .object({
+  .strictObject({
     ...sharedResourceFields,
     newsType: z.enum([
       "press-release",
@@ -207,7 +301,7 @@ export const newsroomSchema = z
       "media-mention",
       "award",
     ]),
-    sourceUrl: z.url().optional(),
+    sourceUrl: httpsUrlSchema.optional(),
   })
   .superRefine((resource, context) => {
     requirePublishedCover(resource, context);
@@ -231,61 +325,70 @@ export const newsroomSchema = z
     }
   });
 
-export const faqSchema = z.object({
+export const faqSchema = z.strictObject({
   id: idSchema("faq"),
   schemaVersion: z.literal(1),
-  question: z.string().min(1),
+  question: nonBlankString,
   slug: slugSchema,
   status: publicationStatusSchema,
   publishedAt: isoDateSchema,
   updatedAt: isoDateSchema,
   topic: idSchema("top").optional(),
   products: z.array(idSchema("prd")).default([]),
-  body: z.string().min(1),
+  body: nonBlankString,
   sourcePath: z.string(),
 });
 
 export const authorSchema = z
-  .object({
+  .strictObject({
     id: idSchema("aut"),
     schemaVersion: z.literal(1),
-    displayName: z.string().min(1),
+    status: z.enum(["active", "archived"]).default("active"),
+    displayName: nonBlankString,
     slug: slugSchema,
-    role: z.string().min(1).optional(),
-    company: z.string().min(1).optional(),
-    photo: z.url().optional(),
-    photoAlt: z.string().min(1).optional(),
-    linkedInUrl: z.url().optional(),
+    role: nonBlankString.optional(),
+    company: nonBlankString.optional(),
+    photo: httpsAssetUrlSchema.optional(),
+    photoAlt: nonBlankString.optional(),
+    photoWidth: z.number().int().positive().optional(),
+    photoHeight: z.number().int().positive().optional(),
+    linkedInUrl: httpsUrlSchema.optional(),
     body: z.string(),
     sourcePath: z.string(),
   })
   .superRefine((author, context) => {
-    if (author.photo && !author.photoAlt) {
-      context.addIssue({
-        code: "custom",
-        path: ["photoAlt"],
-        message: "Author photo alt text is required when a photo is present.",
-      });
+    if (author.photo) {
+      for (const field of ["photoAlt", "photoWidth", "photoHeight"] as const) {
+        if (!author[field]) {
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: `${field} is required when an author photo is present.`,
+          });
+        }
+      }
     }
   });
 
-export const topicSchema = z.object({
+export const topicSchema = z.strictObject({
   id: idSchema("top"),
   schemaVersion: z.literal(1),
-  name: z.string().min(1),
+  status: z.enum(["active", "archived"]).default("active"),
+  name: nonBlankString,
   slug: slugSchema,
   displayOrder: z.number().int().default(0),
   body: z.string(),
   sourcePath: z.string(),
 });
 
-export const productSchema = z.object({
+export const productSchema = z.strictObject({
   id: idSchema("prd"),
   schemaVersion: z.literal(1),
-  name: z.string().min(1),
+  status: z.enum(["active", "archived"]).default("active"),
+  name: nonBlankString,
   slug: slugSchema,
-  description: z.string().min(1).optional(),
-  productPageUrl: z.string().startsWith("/").optional(),
+  description: nonBlankString.optional(),
+  productPageUrl: internalHrefSchema.optional(),
   displayOrder: z.number().int().default(0),
   body: z.string(),
   sourcePath: z.string(),

@@ -2,14 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 
 import matter from "gray-matter";
+import { cache } from "react";
 import { z } from "zod";
 
-import { siteConfig } from "@/config/site";
+import { siteConfig } from "../../config/site";
 import {
   collectionDefinitions,
   primaryCollectionKeys,
   type PrimaryCollectionKey,
-} from "@/lib/content/collections";
+} from "./collections";
+import { validateMarkdownStructure } from "./markdown";
 import {
   authorSchema,
   faqSchema,
@@ -25,7 +27,7 @@ import {
   type Product,
   type Topic,
   type VideoResource,
-} from "@/schemas/content";
+} from "../../schemas/content";
 
 const defaultContentRoot = path.join(process.cwd(), "content");
 
@@ -58,11 +60,15 @@ function markdownFiles(root: string, directory: string): string[] {
   const fullDirectory = path.join(root, directory);
   if (!fs.existsSync(fullDirectory)) return [];
 
-  return fs
-    .readdirSync(fullDirectory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => path.join(fullDirectory, entry.name))
-    .sort();
+  function filesIn(currentDirectory: string): string[] {
+    return fs.readdirSync(currentDirectory, { withFileTypes: true }).flatMap((entry) => {
+      const entryPath = path.join(currentDirectory, entry.name);
+      if (entry.isDirectory()) return filesIn(entryPath);
+      return entry.isFile() && entry.name.endsWith(".md") ? [entryPath] : [];
+    });
+  }
+
+  return filesIn(fullDirectory).sort();
 }
 
 function formatZodError(filePath: string, error: z.ZodError): string[] {
@@ -84,6 +90,16 @@ function parseDirectory<T>(
     try {
       const source = fs.readFileSync(filePath, "utf8");
       const parsed = matter(source);
+      for (const reservedField of ["body", "sourcePath"]) {
+        if (reservedField in parsed.data) {
+          issues.push(
+            `${path.relative(process.cwd(), filePath)} (${reservedField}): field is derived from the Markdown file and must not appear in frontmatter`,
+          );
+        }
+      }
+      for (const issue of validateMarkdownStructure(parsed.content)) {
+        issues.push(`${path.relative(process.cwd(), filePath)} (body): ${issue}`);
+      }
       const result = schema.safeParse({
         ...parsed.data,
         body: parsed.content.trim(),
@@ -161,8 +177,12 @@ function validateReferences(repository: ContentRepository, issues: string[]) {
   }
 }
 
-function validatePublicationDates(repository: ContentRepository, issues: string[]) {
-  const today = new Date().toISOString().slice(0, 10);
+function validatePublicationDates(
+  repository: ContentRepository,
+  issues: string[],
+  now: Date,
+) {
+  const today = now.toISOString().slice(0, 10);
   const entries = [
     ...Object.values(repository.resources).flat(),
     ...repository.faqs,
@@ -174,7 +194,10 @@ function validatePublicationDates(repository: ContentRepository, issues: string[
         `${entry.sourcePath}: published content cannot have a future publishedAt date`,
       );
     }
-    if (entry.updatedAt < entry.publishedAt) {
+    if (entry.updatedAt > today) {
+      issues.push(`${entry.sourcePath}: updatedAt cannot be in the future`);
+    }
+    if (entry.status === "published" && entry.updatedAt < entry.publishedAt) {
       issues.push(`${entry.sourcePath}: updatedAt cannot predate publishedAt`);
     }
   }
@@ -216,6 +239,7 @@ function buildRedirects(
 
 export function loadContentRepository(
   root = defaultContentRoot,
+  now = new Date(),
 ): ContentRepository {
   const issues: string[] = [];
   const resources = {} as Record<PrimaryCollectionKey, ResourceRecord[]>;
@@ -295,7 +319,7 @@ export function loadContentRepository(
   };
 
   validateReferences(repository, issues);
-  validatePublicationDates(repository, issues);
+  validatePublicationDates(repository, issues, now);
   repository.redirects = buildRedirects(Object.values(resources).flat(), issues);
 
   if (issues.length > 0) {
@@ -303,6 +327,12 @@ export function loadContentRepository(
   }
 
   return repository;
+}
+
+const getDefaultContentRepository = cache(() => loadContentRepository());
+
+export function getContentRepository(): ContentRepository {
+  return getDefaultContentRepository();
 }
 
 export function isPublicStatus(
@@ -320,7 +350,7 @@ export function getPublishedResources(
 ): ResourceRecord[] {
   if (!siteConfig.resourceCollections[collection]) return [];
 
-  return loadContentRepository()
+  return getContentRepository()
     .resources[collection].filter((resource) =>
       isPublicStatus(resource.status, resource.publishedAt, now),
     )
@@ -338,7 +368,21 @@ export function getPublishedResource(
 
 export function getPublishedFaqs(now = new Date()): Faq[] {
   if (!siteConfig.resourceCollections.faqs) return [];
-  return loadContentRepository().faqs.filter((faq) =>
+  return getContentRepository().faqs.filter((faq) =>
     isPublicStatus(faq.status, faq.publishedAt, now),
   );
+}
+
+export type ResourceWithVideo = ResourceRecord & {
+  video: NonNullable<Blog["video"]>;
+};
+
+export function hasVideo(resource: ResourceRecord): resource is ResourceWithVideo {
+  return "video" in resource && Boolean(resource.video);
+}
+
+export function getPublishedVideoResources(now = new Date()): ResourceWithVideo[] {
+  return primaryCollectionKeys
+    .flatMap((collection) => getPublishedResources(collection, now))
+    .filter(hasVideo);
 }

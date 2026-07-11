@@ -6,6 +6,7 @@
 - Replace the starter homepage and implement the intended routes.
 - Apply the company’s design tokens, typography, imagery, navigation, and responsive behavior.
 - Remove placeholder domains and configure the production URL, CTA, SEO defaults, and social profiles. Configure the media hostname when the project publishes repository resources.
+- Add a recognizable site icon and a tested 1200×630 social preview with real alt text and dimensions.
 
 ## Content
 
@@ -14,6 +15,7 @@
 - Confirm redirects preserve changed public URLs without chains or conflicts.
 - Confirm images have stable URLs, dimensions, rights information, and useful alt text.
 - Confirm videos have stable playback data, captions, and crawlable transcripts when available.
+- Confirm no resource says `access: gated` until signed playback or download fulfillment is actually implemented.
 - Remove unsupported claims, fabricated proof, placeholder copy, and fake forms.
 
 ## Discovery
@@ -33,6 +35,7 @@
 ## Operations
 
 - Configure least-privilege GitHub, Vercel, and Cloudflare access.
+- Enable GitHub private vulnerability reporting or publish a real private security contact.
 - Confirm preview review and production approval expectations.
 - Document scheduled deployment triggers and media backups.
 - Monitor failed builds, indexing, crawler blocks, and Core Web Vitals after launch.

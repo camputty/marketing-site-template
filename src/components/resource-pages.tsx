@@ -19,10 +19,14 @@ import { renderMarkdown } from "@/lib/content/markdown";
 import {
   getPublishedResource,
   getPublishedResources,
-  loadContentRepository,
+  getContentRepository,
+  type ContentRepository,
   type ResourceRecord,
 } from "@/lib/content/repository";
-import { absoluteUrl } from "@/lib/site";
+import {
+  pageMetadata,
+  resourceCanonicalUrl,
+} from "@/lib/site";
 import { cloudflareStreamPlayerUrl } from "@/lib/video";
 import type { VideoResource } from "@/schemas/content";
 
@@ -53,11 +57,27 @@ export function ResourceIndexPage({
   );
 }
 
+export function generateResourceIndexMetadata(
+  collection: PrimaryCollectionKey,
+): Metadata {
+  const definition = collectionDefinitions[collection];
+  return pageMetadata(
+    definition.route,
+    definition.label,
+    `Browse ${definition.label.toLowerCase()} from ${siteConfig.company.name}.`,
+  );
+}
+
 function videoJsonLd(
   resource: ResourceRecord,
   video: VideoResource["video"],
 ): Record<string, unknown> | undefined {
-  if (!video) return undefined;
+  if (
+    !video ||
+    (resource.collection === "videos" && resource.access === "gated")
+  ) {
+    return undefined;
+  }
 
   return {
     "@type": "VideoObject",
@@ -70,12 +90,25 @@ function videoJsonLd(
   };
 }
 
-export function resourceJsonLd(resource: ResourceRecord): Record<string, unknown> {
+export function resourceJsonLd(
+  resource: ResourceRecord,
+  repository: ContentRepository = getContentRepository(),
+): Record<string, unknown> {
+  const canonical = resourceCanonicalUrl(resource);
+  const author =
+    "author" in resource && resource.author
+      ? repository.authors.find((entry) => entry.id === resource.author)
+      : undefined;
   if (resource.collection === "videos" && "video" in resource) {
+    const videoData = videoJsonLd(resource, resource.video);
     return {
       "@context": "https://schema.org",
-      ...videoJsonLd(resource, resource.video),
-      url: absoluteUrl(resource.url),
+      ...(videoData ?? {
+        "@type": "CreativeWork",
+        name: resource.title,
+        description: resource.summary,
+      }),
+      url: canonical,
       publisher: {
         "@type": "Organization",
         name: siteConfig.company.name,
@@ -94,9 +127,18 @@ export function resourceJsonLd(resource: ResourceRecord): Record<string, unknown
     headline: resource.title,
     description: resource.summary,
     datePublished: resource.publishedAt,
-    dateModified: resource.updatedAt,
-    url: absoluteUrl(resource.url),
+    dateModified:
+      resource.updatedAt > resource.publishedAt
+        ? resource.updatedAt
+        : resource.publishedAt,
+    url: canonical,
     image: resource.coverImage,
+    author: author
+      ? {
+          "@type": "Person",
+          name: author.displayName,
+        }
+      : undefined,
     publisher: {
       "@type": "Organization",
       name: siteConfig.company.name,
@@ -112,18 +154,28 @@ export function resourceJsonLd(resource: ResourceRecord): Record<string, unknown
 }
 
 function ResourceRelationships({ resource }: { resource: ResourceRecord }) {
-  const repository = loadContentRepository();
+  const repository = getContentRepository();
   const authorIds = new Set<string>();
   if ("author" in resource && resource.author) authorIds.add(resource.author);
   if (resource.collection === "videos" && "speakers" in resource) {
     resource.speakers.forEach((speaker) => authorIds.add(speaker));
   }
 
-  const authors = repository.authors.filter((author) => authorIds.has(author.id));
-  const topic = repository.topics.find((entry) => entry.id === resource.topic);
-  const products = repository.products.filter((product) =>
-    resource.products.includes(product.id),
+  const authorsById = new Map(
+    repository.authors.map((author) => [author.id, author]),
   );
+  const authors = [...authorIds].flatMap((id) => {
+    const author = authorsById.get(id);
+    return author ? [author] : [];
+  });
+  const topic = repository.topics.find((entry) => entry.id === resource.topic);
+  const productsById = new Map(
+    repository.products.map((product) => [product.id, product]),
+  );
+  const products = resource.products.flatMap((id) => {
+    const product = productsById.get(id);
+    return product ? [product] : [];
+  });
 
   if (authors.length === 0 && !topic && products.length === 0) return null;
 
@@ -202,12 +254,16 @@ function CaseStudySections({ resource }: { resource: ResourceRecord }) {
           Customer
         </p>
         <p className="mt-2 text-xl font-semibold">{resource.customerName}</p>
-        {resource.customerLogo && resource.customerLogoAlt ? (
+        {resource.customerLogo &&
+        resource.customerLogoAlt &&
+        resource.customerLogoWidth &&
+        resource.customerLogoHeight ? (
           <Image
             src={resource.customerLogo}
             alt={resource.customerLogoAlt}
-            width={320}
-            height={160}
+            width={resource.customerLogoWidth}
+            height={resource.customerLogoHeight}
+            sizes="320px"
             className="mt-4 h-20 w-auto object-contain"
           />
         ) : null}
@@ -256,6 +312,13 @@ function CaseStudySections({ resource }: { resource: ResourceRecord }) {
 
 function VideoDetails({ resource }: { resource: ResourceRecord }) {
   if (!("video" in resource) || !resource.video) return null;
+  if (resource.collection === "videos" && resource.access === "gated") {
+    return (
+      <p className="mt-10 text-sm text-muted">
+        Access fulfillment has not been configured for this video.
+      </p>
+    );
+  }
 
   const takeaways = resource.collection === "videos" ? resource.takeaways : [];
   const slidesUrl = resource.collection === "videos" ? resource.slidesUrl : undefined;
@@ -295,6 +358,13 @@ function VideoDetails({ resource }: { resource: ResourceRecord }) {
 
 function ResourceDestination({ resource }: { resource: ResourceRecord }) {
   if (resource.collection === "guides") {
+    if (resource.access === "gated") {
+      return (
+        <p className="mt-10 text-sm text-muted">
+          Access fulfillment has not been configured for this resource.
+        </p>
+      );
+    }
     return (
       <div className="mt-10 flex flex-wrap gap-x-5 gap-y-2">
         {resource.downloadUrl ? (
@@ -377,19 +447,53 @@ export function generateResourceMetadata(
   const resource = getPublishedResource(collection, slug);
   if (!resource) return {};
 
-  const canonical = resource.canonicalUrl ?? absoluteUrl(resource.url);
+  const canonical = resourceCanonicalUrl(resource);
+  const repository = getContentRepository();
+  const author =
+    "author" in resource && resource.author
+      ? repository.authors.find((entry) => entry.id === resource.author)
+      : undefined;
+  const images =
+    resource.coverImage &&
+    resource.coverImageAlt &&
+    resource.coverImageWidth &&
+    resource.coverImageHeight
+      ? [
+          {
+            url: resource.coverImage,
+            alt: resource.coverImageAlt,
+            width: resource.coverImageWidth,
+            height: resource.coverImageHeight,
+          },
+        ]
+      : undefined;
+  const title = resource.seo?.title ?? resource.title;
+  const description = resource.seo?.description ?? resource.summary;
   return {
-    title: resource.seo?.title ?? resource.title,
-    description: resource.seo?.description ?? resource.summary,
+    title,
+    description,
+    authors: author ? [{ name: author.displayName }] : undefined,
     alternates: { canonical },
     openGraph: {
-      type: "article",
+      type: resource.collection === "videos" ? "video.other" : "article",
       url: canonical,
-      title: resource.seo?.title ?? resource.title,
-      description: resource.seo?.description ?? resource.summary,
+      title,
+      description,
       publishedTime: resource.publishedAt,
-      modifiedTime: resource.updatedAt,
-      images: resource.coverImage ? [resource.coverImage] : undefined,
+      modifiedTime:
+        resource.updatedAt > resource.publishedAt
+          ? resource.updatedAt
+          : resource.publishedAt,
+      images,
+    },
+    twitter: {
+      card: images ? "summary_large_image" : "summary",
+      title,
+      description,
+      images:
+        resource.coverImage && resource.coverImageAlt
+          ? [{ url: resource.coverImage, alt: resource.coverImageAlt }]
+          : undefined,
     },
   };
 }

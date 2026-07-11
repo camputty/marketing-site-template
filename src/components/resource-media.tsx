@@ -8,7 +8,10 @@ type ResourceMediaProps = {
 };
 
 export function ResourceMedia({ resource }: ResourceMediaProps) {
-  if ("video" in resource && resource.video) {
+  const isUnfulfilledGate =
+    "access" in resource && resource.access === "gated";
+
+  if ("video" in resource && resource.video && !isUnfulfilledGate) {
     const playerUrl = cloudflareStreamPlayerUrl(resource.video.id);
     if (playerUrl) {
       return (
@@ -17,8 +20,10 @@ export function ResourceMedia({ resource }: ResourceMediaProps) {
             title={resource.title}
             src={playerUrl}
             className="h-full w-full border-0"
-            allow="accelerometer; autoplay; encrypted-media; picture-in-picture"
+            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
           />
         </div>
       );
@@ -37,7 +42,8 @@ export function ResourceMedia({ resource }: ResourceMediaProps) {
         alt={resource.coverImageAlt}
         width={resource.coverImageWidth}
         height={resource.coverImageHeight}
-        priority
+        sizes="(min-width: 1024px) 896px, calc(100vw - 40px)"
+        preload
         className="h-auto w-full rounded-lg"
       />
     );

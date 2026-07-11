@@ -19,6 +19,7 @@ export function ResourceCard({ resource }: ResourceCardProps) {
           alt={resource.coverImageAlt}
           width={resource.coverImageWidth}
           height={resource.coverImageHeight}
+          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
           className="aspect-video w-full object-cover"
         />
       ) : null}
@@ -27,7 +28,10 @@ export function ResourceCard({ resource }: ResourceCardProps) {
           {resource.publishedAt}
         </p>
         <h2 className="mt-2 text-xl font-semibold tracking-tight">
-          <Link href={resource.url} className="after:absolute after:inset-0">
+          <Link
+            href={resource.url}
+            className="after:absolute after:inset-0 focus-visible:outline-2 focus-visible:outline-offset-4"
+          >
             {resource.title}
           </Link>
         </h2>

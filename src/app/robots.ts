@@ -1,15 +1,25 @@
 import type { MetadataRoute } from "next";
 
-import { getPublishedResources } from "@/lib/content/repository";
-import { absoluteUrl, isSiteConfigured } from "@/lib/site";
+import { getPublishedVideoResources } from "@/lib/content/repository";
+import {
+  absoluteUrl,
+  isCanonicalResourcePage,
+  isIndexingEnabled,
+} from "@/lib/site";
+import { isCloudflareStreamCustomerCode } from "@/lib/video";
 
 export default function robots(): MetadataRoute.Robots {
-  if (!isSiteConfigured()) {
+  if (!isIndexingEnabled()) {
     return { rules: { userAgent: "*", disallow: "/" } };
   }
 
   const sitemaps = [absoluteUrl("/sitemap.xml")];
-  if (getPublishedResources("videos").length > 0) {
+  if (
+    isCloudflareStreamCustomerCode(
+      process.env.NEXT_PUBLIC_CLOUDFLARE_STREAM_CUSTOMER_CODE,
+    ) &&
+    getPublishedVideoResources().some(isCanonicalResourcePage)
+  ) {
     sitemaps.push(absoluteUrl("/video-sitemap.xml"));
   }
 

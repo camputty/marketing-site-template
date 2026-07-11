@@ -8,6 +8,7 @@ describe("site configuration defaults", () => {
     expect("pages" in siteConfig).toBe(false);
     expect("status" in siteConfig).toBe(false);
     expect("initializedAt" in siteConfig).toBe(false);
+    expect("locales" in siteConfig).toBe(false);
   });
 
   it("requires usable navigation destinations", () => {
@@ -21,6 +22,18 @@ describe("site configuration defaults", () => {
       siteConfigSchema.safeParse({
         ...siteConfig,
         navigation: [{ label: "Protocol relative", href: "//example.org" }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects duplicate navigation destinations", () => {
+    expect(
+      siteConfigSchema.safeParse({
+        ...siteConfig,
+        navigation: [
+          { label: "First", href: "/about" },
+          { label: "Second", href: "/about" },
+        ],
       }).success,
     ).toBe(false);
   });

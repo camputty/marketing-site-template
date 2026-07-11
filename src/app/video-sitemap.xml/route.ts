@@ -1,17 +1,28 @@
-import { getPublishedResources } from "@/lib/content/repository";
-import { absoluteUrl, isSiteConfigured } from "@/lib/site";
+import {
+  getPublishedVideoResources,
+  hasVideo,
+  type ResourceRecord,
+} from "@/lib/content/repository";
+import {
+  absoluteUrl,
+  isCanonicalResourcePage,
+  isDiscoveryEnabled,
+} from "@/lib/site";
 import { escapeXml } from "@/lib/xml";
-import { cloudflareStreamPlayerUrl } from "@/lib/video";
+import {
+  cloudflareStreamPlayerUrl,
+  isCloudflareStreamCustomerCode,
+} from "@/lib/video";
 
 export const dynamic = "force-static";
 
 export function buildVideoSitemapXml(
-  videos: ReturnType<typeof getPublishedResources>,
+  videos: ResourceRecord[],
   customerCode = process.env.NEXT_PUBLIC_CLOUDFLARE_STREAM_CUSTOMER_CODE,
 ): string {
   const entries = videos
+    .filter(hasVideo)
     .map((resource) => {
-      if (resource.collection !== "videos" || !("video" in resource)) return "";
       const playerUrl = cloudflareStreamPlayerUrl(resource.video.id, customerCode);
       if (!playerUrl) return "";
 
@@ -37,14 +48,14 @@ ${entries}
 }
 
 export function GET() {
-  const videos = getPublishedResources("videos").filter(
-    (resource) => resource.collection === "videos",
-  );
+  const videos = getPublishedVideoResources().filter(isCanonicalResourcePage);
 
   if (
-    !isSiteConfigured() ||
+    !isDiscoveryEnabled() ||
     videos.length === 0 ||
-    !process.env.NEXT_PUBLIC_CLOUDFLARE_STREAM_CUSTOMER_CODE
+    !isCloudflareStreamCustomerCode(
+      process.env.NEXT_PUBLIC_CLOUDFLARE_STREAM_CUSTOMER_CODE,
+    )
   ) {
     return new Response("Not found", { status: 404 });
   }
