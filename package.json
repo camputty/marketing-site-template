@@ -41,15 +41,15 @@
     "@axe-core/playwright": "4.12.1",
     "@playwright/test": "1.61.1",
     "@tailwindcss/postcss": "4.3.2",
-    "@types/node": "24.13.3",
+    "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@types/sanitize-html": "2.16.1",
-    "eslint": "9.39.2",
+    "eslint": "10.7.0",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "4.3.2",
     "tsx": "4.23.0",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "vitest": "4.1.10"
   }
 }
